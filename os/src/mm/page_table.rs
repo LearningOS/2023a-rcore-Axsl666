@@ -1,7 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
-use alloc::boxed::Box;
+use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, PhysAddr};
+
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -174,7 +174,7 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
 }
 
 
-/// ch4: address v2p
+/// ch4: address v2p 恒等映射情况可用
 pub fn virt_to_pyhs(token: usize,va: VirtAddr) -> PhysAddr{
     let pagetable = PageTable::from_token(token);
     let vpn = va.floor();
@@ -184,10 +184,10 @@ pub fn virt_to_pyhs(token: usize,va: VirtAddr) -> PhysAddr{
 }
 
 /// ch4: return a physical pointer in memory set of the pagetable token 
-pub fn translated_mut_ptr<T>(token: usize, ptr: *mut T) -> Box<&'static mut T>{
+pub fn translated_mut_ptr<T>(token: usize, ptr: *mut T) -> &'static mut T{
     let ptr_va = VirtAddr::from(ptr as usize);
     let ptr_pa = virt_to_pyhs(token, ptr_va);
-    unsafe { Box::new((ptr_pa.0 as *mut T).as_mut().unwrap()) }
+    ptr_pa.get_mut()
 }
 
 

@@ -14,6 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
@@ -25,7 +26,7 @@ pub use task::{TaskControlBlock, TaskStatus};
 pub use context::TaskContext;
 
 use crate::mm::{self, MapPermission};
-use crate::timer::get_time_us;
+use crate::timer::get_time_ms;
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -179,7 +180,7 @@ impl TaskManager {
     fn get_current_task_info(&self) -> (TaskStatus, [u32; MAX_SYSCALL_NUM], usize) {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        let tcb = inner.tasks[current];
+        let tcb = &inner.tasks[current];
         let time_now = get_time_ms();
         let mut syscall_times_cp: [u32; MAX_SYSCALL_NUM] = [0; MAX_SYSCALL_NUM];
         for i in 0..tcb.syscall_times.len() {
@@ -195,11 +196,11 @@ impl TaskManager {
     }
 
     /// ch4
-    fn mmap(&self,_start: usize, _len: usize, _port: usize) -> isize {
-        let start_va = mm::VirtAddr(_start);
-        let end_va = mm::VirtAddr(_start+_len);
+    fn mmap(&self,start: usize, len: usize, port: usize) -> isize {
+        let start_va = mm::VirtAddr(start);
+        let end_va = mm::VirtAddr(start+len);
         // handle flags
-        let map_permission = MapPermission::from_bits((_port as u8) << 1).unwrap() | MapPermission::U;
+        let map_permission = MapPermission::from_bits((port as u8) << 1).unwrap() | MapPermission::U;
 
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
@@ -308,15 +309,17 @@ pub fn add_syscall_times(syscall_id: usize) {
     TASK_MANAGER.add_syscall_times(syscall_id)
 }
 
+/// ch4: taskinfo
 pub fn get_current_task_info() -> (TaskStatus, [u32; MAX_SYSCALL_NUM], usize) {
     TASK_MANAGER.get_current_task_info()
 }
 
 /// ch4: mmap
-pub fn mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    TASK_MANAGER.mmap(_start,_len,_port)
+pub fn mmap(start: usize, len: usize, port: usize) -> isize {
+    TASK_MANAGER.mmap(start,len,port)
 }
 
-pub fn munmap(_start: usize, _len: usize) -> isize {
-    TASK_MANAGER.munmap(_start, _len)
+/// ch4: munmap
+pub fn munmap(start: usize, len: usize) -> isize {
+    TASK_MANAGER.munmap(start, len)
 }
