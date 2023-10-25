@@ -215,7 +215,7 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
 }
 /// semaphore create syscall
 pub fn sys_semaphore_create(res_count: usize) -> isize {
-    trace!(
+    debug!(
         "kernel:pid[{}] tid[{}] sys_semaphore_create",
         current_task().unwrap().process.upgrade().unwrap().getpid(),
         current_task()
@@ -236,8 +236,8 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
         .map(|(id, _)| id)
     {
         process_inner.semaphore_list[id] = Some(Arc::new(Semaphore::new(res_count)));
-        
         process_inner.sem_avail[id] = res_count;
+
         for tid in 0..process_inner.tasks.len() {
             let task = process_inner.get_task(tid);
             let mut task_inner = task.inner_exclusive_access();
@@ -262,11 +262,12 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
 
         process_inner.semaphore_list.len() - 1
     };
+    debug!("{:#?}",&process_inner.sem_avail);
     id as isize
 }
 /// semaphore up syscall
 pub fn sys_semaphore_up(sem_id: usize) -> isize {
-    trace!(
+    debug!(
         "kernel:pid[{}] tid[{}] sys_semaphore_up",
         current_task().unwrap().process.upgrade().unwrap().getpid(),
         current_task()
@@ -288,13 +289,15 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
     task_inner.sem_alloc[sem_id] -= 1;
     drop(task_inner);
     drop(task);
+
+    debug!("{:#?}",&process_inner.sem_avail);
     drop(process_inner);
     sem.up();
     0
 }
 /// semaphore down syscall
 pub fn sys_semaphore_down(sem_id: usize) -> isize {
-    trace!(
+    debug!(
         "kernel:pid[{}] tid[{}] sys_semaphore_down",
         current_task().unwrap().process.upgrade().unwrap().getpid(),
         current_task()
@@ -316,7 +319,9 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
     if process_inner.deadlock_detect {
         //
         let mut work = process_inner.sem_avail.clone();
+        debug!("{:#?}",work);
         let n = process_inner.tasks.len();
+        debug!("{}",n);
         let mut finish = vec![false; n];
 
         loop {
@@ -329,7 +334,8 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
                         .iter()
                         .enumerate()
                         .any(|(sem_id, sem_remain)| task_inner.sem_need[sem_id] > *sem_remain);
-
+                    
+                        debug!("{}",a);
                     if !a {
                         finish[tid] = true;
                         for (sem_id, source) in work.iter_mut().enumerate() {
@@ -344,10 +350,7 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
             }
         }
 
-        for i in &finish {
-            debug!("{}",i)
-        }
-        
+
         let task = current_task().unwrap();
         let mut task_inner = task.inner_exclusive_access();
         if finish.iter().any(|x| *x == false) {
@@ -386,12 +389,15 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
         // }
     }
 
-    let mut task_inner = task.inner_exclusive_access();
-    process_inner.sem_avail[sem_id] -= 1;
-    task_inner.sem_alloc[sem_id] += 1;
-    task_inner.sem_need[sem_id] -= 1;
-    drop(task_inner);
+    
+    if process_inner.sem_avail[sem_id] > 0 {
+        process_inner.sem_avail[sem_id] -= 1;
+        let mut task_inner = task.inner_exclusive_access();
+        task_inner.sem_alloc[sem_id] += 1;
+        task_inner.sem_need[sem_id] -= 1;
+    }
     drop(task);
+    debug!("{:#?}",&process_inner.sem_avail);
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.down();
